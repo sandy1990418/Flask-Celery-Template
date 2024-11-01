@@ -1,0 +1,8 @@
+pyyaml
+flask
+colorlog==6.8.2
+python-dotenv
+pandas
+celery==5.4.0
+sqlalchemy
+requests
