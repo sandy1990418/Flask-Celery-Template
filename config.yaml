@@ -1,6 +1,11 @@
+sqlite:
+    connect_args:
+        database: ./db/example.db
+database_location: ./db/example.db
+active_database: sqlite
 celery_config:
-    task_name: 'template'
-    broker: 'sqla+sqlite:///db/celery.db'
+    task_name: 'evaluation_tasks'
+    broker: 'pyamqp://guest:guest@rabbitmq:5672//' #'sqla+sqlite:///db/celery.db'
     backend: 'db+sqlite:///db/celery.db'
     task_serializer: 'json'
     accept_content: ['json']
@@ -9,9 +14,12 @@ celery_config:
     enable_utc: True
     task_track_started: True
     worker_hijack_root_logger: False
-    worker_concurrency: 1
+    worker_concurrency: 2
+    worker_prefetch_multiplier: 1
     broker_connection_retry: True
     broker_connection_max_retries: None
     result_persistent: True
-    worker_prefetch_multiplier: 1
     task_acks_late: True
+    task_time_limit: 3600 # Tasks retire
+    worker_pool_restarts: True
+    task_reject_on_worker_lost: True # 當worker走丟的時候重新排隊

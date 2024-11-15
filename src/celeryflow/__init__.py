@@ -1,8 +1,8 @@
 from celery import Celery
 from celery.signals import after_setup_logger, after_setup_task_logger
 
-from src.utils import logger
-from src.utils import yaml_data as CONFIG
+from src.utils.load_yaml import yaml_data as CONFIG
+from src.utils.logger import logger
 
 
 def setup_logger(celery_logger, **kwargs):
@@ -19,21 +19,36 @@ after_setup_task_logger.connect(setup_logger)
 
 
 def create_celery(yaml_data: dict):
-    broker = yaml_data.pop("broker", None)
-    backend = yaml_data.pop("backend", None)
+    broker = yaml_data.get("broker", None)
+    backend = yaml_data.get("backend", None)
 
     celery = Celery(__name__, broker=broker, backend=backend)
 
     # Celery Config
     celery.conf.update(yaml_data)
 
-    celery.conf["imports"] = ("src.celeryflow.tasks",)
-
+    celery.conf.update(
+        imports=("src.celeryflow.tasks",),
+        result_extended=True,
+    )
     return celery
 
 
 # Load Config from yaml
-celery_app = create_celery(CONFIG["celery_config"])
+def configure_celery(app=None):
+    celery = create_celery(CONFIG["celery_config"])
 
-# Progress track DB
-PROGRESS_DATABASE_URL = "sqlite:///db/progress.db"
+    if app:
+
+        class ContextTask(celery.Task):
+            def __call__(self, *args, **kwargs):
+                with app.app_context():
+                    return self.run(*args, **kwargs)
+
+        celery.Task = ContextTask
+        celery.conf.update(app.config)
+    return celery
+
+
+# Initialize celery without Flask context
+celery_app = configure_celery()

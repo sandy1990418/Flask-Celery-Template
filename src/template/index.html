@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Project Management System</title>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/tailwindcss/2.2.19/tailwind.min.css" rel="stylesheet">
+    <script>
+        function toggleForm(formId, buttonGroupId) {
+            const form = document.getElementById(formId);
+            const buttonGroup = document.getElementById(buttonGroupId);
+            if (form.style.display === 'none') {
+                form.style.display = 'block';
+                buttonGroup.style.display = 'none';
+            } else {
+                form.style.display = 'none';
+                buttonGroup.style.display = 'flex';
+            }
+        }
+    </script>
+</head>
+<body class="bg-gray-50 p-8">
+    <div class="max-w-4xl mx-auto">
+        <h1 class="text-2xl font-bold mb-6">Project Management</h1>
+
+        <!-- Add Project Button -->
+        <button onclick="toggleForm('addForm', '')" class="mb-4 px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700">
+            Add Project
+        </button>
+
+        <!-- Add Project Form -->
+        <form id="addForm" action="{{ url_for('project.add_project') }}" method="POST" style="display:none;"
+              class="space-y-4 bg-white p-6 rounded-lg shadow-md mb-6">
+            <input type="text" name="project_name" placeholder="Project Name" required
+                   class="w-full px-3 py-2 border rounded">
+            <input type="text" name="project_owner" placeholder="Project Owner" required
+                   class="w-full px-3 py-2 border rounded">
+            <input type="text" name="project_type" placeholder="Project Type" required
+                   class="w-full px-3 py-2 border rounded">
+            <input type="text" name="organization" placeholder="Organization" required
+                   class="w-full px-3 py-2 border rounded">
+            <input type="text" name="department" placeholder="Department" required
+                   class="w-full px-3 py-2 border rounded">
+            <button type="submit" class="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700">
+                Add Project
+            </button>
+        </form>
+
+        <!-- Project List -->
+        <ul class="space-y-6">
+            {% for project in projects %}
+            {% set outer_loop = loop %}
+            <li class="bg-white rounded-lg shadow-md p-6">
+                <div class="flex items-center justify-between mb-4">
+                    <span class="text-lg font-medium">{{ project.project_name }}</span>
+
+                    <!-- Action Buttons -->
+                    <div id="buttonGroup{{ outer_loop.index0 }}" class="space-x-2 flex">
+                        <button onclick="toggleForm('editForm{{ outer_loop.index0 }}', 'buttonGroup{{ outer_loop.index0 }}')"
+                                class="px-3 py-1 bg-gray-500 text-white rounded hover:bg-gray-600">
+                            Edit
+                        </button>
+                        <form action="{{ url_for('project.update_project', project_id=project.project_id, action_type='delete')}}"
+                              method="POST" style="display:inline;">
+                            <button type="submit" name="button_action" value="Delete"
+                                    class="px-3 py-1 bg-red-600 text-white rounded hover:bg-red-700">
+                                Delete
+                            </button>
+                        </form>
+                        <form action="{{ url_for('project.history_record_project', project_name=project.project_name, from_project_id=project.project_id) }}"
+                              method="POST" style="display:inline;">
+                            <button type="submit" name="button_action" value="history_record"
+                                    class="px-3 py-1 bg-blue-500 text-white rounded hover:bg-blue-600">
+                                History
+                            </button>
+                        </form>
+                    </div>
+
+                    <!-- Edit Form -->
+                    <form id="editForm{{ outer_loop.index0 }}"
+                          action="{{ url_for('project.update_project', project_id=project.project_id, action_type='update')}}"
+                          method="POST" style="display:none;" class="space-y-3">
+                        <div class="flex flex-wrap gap-3">
+                            <input type="text" name="project_name" value="{{ project.project_name }}"
+                                   placeholder="Project Name" required class="flex-1 px-3 py-2 border rounded">
+                            <input type="text" name="project_owner" value="{{ project.project_owner }}"
+                                   placeholder="Project Owner" required class="flex-1 px-3 py-2 border rounded">
+                            <input type="text" name="project_type" value="{{ project.project_type }}"
+                                   placeholder="Project Type" required class="flex-1 px-3 py-2 border rounded">
+                            <input type="text" name="organization" value="{{ project.organization }}"
+                                   placeholder="Organization" required class="flex-1 px-3 py-2 border rounded">
+                            <input type="text" name="department" value="{{ project.department }}"
+                                   placeholder="Department" required class="flex-1 px-3 py-2 border rounded">
+                        </div>
+                        <div class="flex justify-end gap-2">
+                            <button type="button" onclick="toggleForm('editForm{{ outer_loop.index0 }}', 'buttonGroup{{ outer_loop.index0 }}')"
+                                    class="px-3 py-1 bg-gray-500 text-white rounded hover:bg-gray-600">
+                                Cancel
+                            </button>
+                            <button type="submit" name="button_action" value="Save"
+                                    class="px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700">
+                                Save
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </li>
+            {% endfor %}
+        </ul>
+    </div>
+</body>
+</html>

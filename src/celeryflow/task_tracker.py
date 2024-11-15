@@ -41,12 +41,15 @@ class TaskProgressTracker:
             description = meta.get("description", "")
             current = meta.get("current", 0)
             total = meta.get("total", 0)
+            self.execution_time = meta.get("execution_time", 0)
+
             logger.info("Task Progress Update:")
             logger.info(f"└── Chain ID: {getattr(self, 'chain_id', 'N/A')}")
             logger.info(f"    ├── Task Description: {description}")
             logger.info(f"    ├── Task ID: {self.request.id}")
             logger.info(f"    ├── State: {state}")
             logger.info(f"    ├── Progress: {progress:.1f}%")
+            logger.info(f"    ├── Execution Time: {self.execution_time}")
             logger.info(f"    └── Current/Total: {current}/{total}")
 
             logger.info(f"Task Progress: {progress}% - {description}")
@@ -85,10 +88,16 @@ class TaskProgressTracker:
         """
         self.set_progress(0, total, description or "Starting task...")
 
-    def complete_task(self, description: str = None) -> None:
+    def complete_task(self, total, description: str = None) -> None:
         """Mark task as successfully completed with 100% progress."""
         self.update_progress(
-            "SUCCESS", {"progress": 100, "description": description or "Task completed"}
+            "SUCCESS",
+            {
+                "current": total,
+                "total": total,
+                "progress": 100,
+                "description": description or "Task completed",
+            },
         )
 
     def fail_task(self, error: str) -> None:
