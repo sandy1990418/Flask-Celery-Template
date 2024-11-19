@@ -1,0 +1,537 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Evaluation Status</title>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/tailwindcss/2.2.19/tailwind.min.css" rel="stylesheet">
+</head>
+<body class="bg-gray-50">
+    <div class="max-w-6xl mx-auto p-8">
+        <div class="bg-white rounded-lg shadow-md p-6">
+            <div class="flex justify-between items-start mb-6">
+                <h1 class="text-2xl font-bold">Evaluation Status</h1>
+                <div class="flex flex-col space-y-2">
+                    <a href="{{ url_for('main.home') }}"
+                       class="px-4 py-2 bg-gray-500 text-white rounded hover:bg-gray-600 focus:outline-none text-center">
+                        Back to Home
+                    </a>
+                    <button
+                        id="pause-button"
+                        onclick="pauseTask()"
+                        class="px-4 py-2 bg-yellow-500 text-white rounded hover:bg-yellow-600 focus:outline-none transition-colors">
+                        Pause Evaluation
+                    </button>
+                    <button
+                        id="resume-button"
+                        onclick="resumeTask()"
+                        class="px-4 py-2 bg-green-500 text-white rounded hover:bg-green-600 focus:outline-none transition-colors hidden">
+                        Resume Evaluation
+                    </button>
+                    <button
+                        id="terminate-button"
+                        onclick="terminateTask()"
+                        class="px-4 py-2 bg-red-500 text-white rounded hover:bg-red-600 focus:outline-none transition-colors">
+                        Terminate
+                    </button>
+                    <!-- <button
+                        id="export-button"
+                        onclick="exportResult()"
+                        class="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 focus:outline-none transition-colors hidden">
+                        Export Results
+                    </button> -->
+                </div>
+            </div>
+
+            <!-- Basic Information -->
+            <div class="mb-8 space-y-2">
+                <p class="text-gray-600">Model Name: <span id="model-name">{{ examinee_model_name }}</span></p>
+                <p class="text-gray-600">Model Version: <span id="model-version">{{ examinee_model_version }}</span></p>
+                <p class="text-gray-600">Model ID: <span id="model-id">{{ examinee_model_id }}</span></p>
+                <p class="text-gray-600">Task ID: <span id="task-id">{{ task_id }}</span></p>
+            </div>
+
+            <!-- Overall Progress -->
+            <div class="mb-8">
+                <h2 class="text-lg font-semibold mb-3">Overall Progress</h2>
+
+                <div class="relative pt-1">
+                    <div class="flex mb-2 items-center justify-between">
+                        <div>
+                            <span id="main-status-badge"
+                                  class="px-2 py-1 rounded text-sm bg-yellow-200 text-yellow-800">
+                                Pending
+                            </span>
+                        </div>
+                        <div class="text-right">
+                            <span class="text-sm font-semibold inline-block text-blue-600">
+                                <span id="progress-percentage">0</span>%
+                            </span>
+                        </div>
+                    </div>
+                    <div class="overflow-hidden h-2 mb-4 text-xs flex rounded bg-gray-200">
+                        <div id="progress-bar"
+                             class="shadow-none flex flex-col text-center whitespace-nowrap text-white justify-center bg-blue-500 transition-all duration-500"
+                             style="width: 0%"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Evaluation Topics List -->
+            <div class="mb-8">
+                <h2 class="text-lg font-semibold mb-3">Evaluation Topics Progress</h2>
+                <div id="exam-topics-container" class="space-y-6">
+                    <!-- Topics will be dynamically inserted here -->
+                </div>
+            </div>
+
+            <!-- Debug Log -->
+            <div class="mt-8">
+                <h2 class="text-lg font-semibold mb-3">Task Log</h2>
+                <div id="debug-log"
+                     class="bg-gray-100 p-4 rounded-lg text-sm font-mono h-40 overflow-y-auto">
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let eventSource = null;
+        let isTaskTerminated = false;
+
+        const mainTaskId = '{{ task_id }}';
+
+        function createExamTopicElement(examTopic) {
+            const topicDiv = document.createElement('div');
+            topicDiv.id = `exam-${examTopic.id}`;
+            topicDiv.className = 'bg-gray-50 p-4 rounded-lg';
+            topicDiv.innerHTML = `
+                <div class="flex justify-between items-center mb-3">
+                    <h3 class="font-x-small">Evaluation Topic: ${examTopic.topic}</h3>
+                    <span class="status-badge px-2 py-1 rounded text-xs bg-yellow-200 text-yellow-800">
+                        ${getStatusText(examTopic.status)}
+                    </span>
+                </div>
+                <div class="space-y-4">
+                    <div class="task-list">
+                        <!-- Tasks will be dynamically inserted here -->
+                    </div>
+                </div>
+            `;
+            return topicDiv;
+        }
+
+        function createTaskElement(task) {
+            const taskDiv = document.createElement('div');
+            taskDiv.className = 'task-item';
+            taskDiv.innerHTML = `
+                <div class="flex items-center justify-between mb-1">
+                    <span class="text-sm font-medium">${task.name}</span>
+                    <span class="text-sm text-blue-600">
+                        ${task.progress}%
+                    </span>
+                </div>
+                <div class="relative pt-1">
+                    <div class="overflow-hidden h-2 mb-1 text-xs flex rounded bg-gray-200">
+                        <div class="shadow-none flex flex-col text-center whitespace-nowrap
+                                text-white justify-center bg-blue-500 transition-all duration-500"
+                            style="width: ${task.progress}%">
+                        </div>
+                    </div>
+                </div>
+                <div class="text-xs text-gray-500">
+                    ${task.status === 'COMPLETED' ? 'Completed' : task.description || 'Processing...'}
+                </div>
+            `;
+            return taskDiv;
+        }
+
+        function getTopicStatus(tasks) {
+            const allTasks = tasks.flatMap(topic => Object.values(topic.tasks));
+            const completed = allTasks.filter(task => task.status === 'COMPLETED').length;
+            const total = allTasks.length;
+
+            if (total === 0) return { state: 'PENDING', text: 'Pending' };
+            if (completed === total) return { state: 'COMPLETED', text: 'Completed' };
+            if (completed > 0) return { state: 'PROGRESS', text: 'In Progress' };
+            return { state: 'PENDING', text: 'Pending' };
+        }
+        function updateExamTopicProgress(examTopic, tasks) {
+           const topicElement = document.getElementById(`exam-${examTopic.id}`);
+           if (!topicElement) return;
+
+           const taskList = topicElement.querySelector('.task-list');
+           const statusBadge = topicElement.querySelector('.status-badge');
+
+           // Update task list
+           tasks.forEach(task => {
+               let taskElement = document.getElementById(`task-${task.id}`);
+               if (!taskElement) {
+                   taskElement = createTaskElement(task);
+                   taskList.appendChild(taskElement);
+               }
+
+               // Update task status
+               const progressBar = taskElement.querySelector('.progress-bar');
+               const progressText = taskElement.querySelector('.progress-text');
+               const description = taskElement.querySelector('.task-description');
+
+               progressBar.style.width = `${task.progress}%`;
+               progressText.textContent = `${task.progress}%`;
+               description.textContent = task.description;
+
+               // Update task status style
+               if (task.status === 'SUCCESS') {
+                   statusBadge.className = 'status-badge px-2 py-1 rounded text-xs bg-green-200 text-green-800';
+                   statusBadge.textContent = 'Completed';
+               } else if (task.status === 'FAILED') {
+                   statusBadge.className = 'status-badge px-2 py-1 rounded text-xs bg-red-200 text-red-800';
+                   statusBadge.textContent = 'Failed';
+               } else {
+                   statusBadge.className = 'status-badge px-2 py-1 rounded text-xs bg-blue-200 text-blue-800';
+                   statusBadge.textContent = 'In Progress';
+               }
+               if (task.error) {
+                   description.classList.add('text-red-600');
+                   description.textContent = `Error: ${task.error}`;
+               }
+           });
+
+           // Calculate overall topic progress
+           const completedTasks = tasks.filter(t => t.status === 'SUCCESS').length;
+           const progress = Math.round((completedTasks / tasks.length) * 100);
+           const allCompleted = completedTasks === tasks.length;
+           const anyFailed = tasks.some(t => t.status === 'FAILURE');
+
+           // Update topic status badge
+           statusBadge.className = `status-badge px-2 py-1 rounded text-xs ${
+               allCompleted ? 'bg-green-200 text-green-800' :
+               anyFailed ? 'bg-red-200 text-red-800' :
+               'bg-blue-200 text-blue-800'
+           }`;
+           statusBadge.textContent = allCompleted ? 'Completed' :
+                                   anyFailed ? 'Failed' :
+                                   'In Progress';
+       }
+
+       async function terminateTask() {
+           if (!confirm('Are you sure you want to terminate this evaluation? This action cannot be undone.')) {
+               return;
+           }
+
+           try {
+               const response = await fetch(`/terminate_task/${mainTaskId}/terminate`, {
+                   method: 'POST',
+               });
+
+               const result = await response.json();
+
+               if (result.success) {
+                   logDebug('Evaluation terminated');
+                   isTaskTerminated = true;
+                   closeEventSource();
+
+                   // Update UI status
+                   const mainStatusBadge = document.getElementById('main-status-badge');
+                   mainStatusBadge.textContent = 'Terminated';
+                   mainStatusBadge.className = 'px-2 py-1 rounded text-sm bg-red-200 text-red-800';
+
+                   // Disable terminate button
+                   const terminateButton = document.getElementById('terminate-button');
+                   terminateButton.disabled = true;
+                   terminateButton.className = 'px-4 py-2 bg-gray-400 text-white rounded cursor-not-allowed';
+               } else {
+                   logDebug('Failed to terminate evaluation', result.error);
+                   alert('Termination failed: ' + (result.error || 'Unknown error'));
+               }
+           } catch (error) {
+               logDebug('Error while terminating evaluation', error);
+               alert('Error during termination: ' + error.message);
+           }
+       }
+
+       async function pauseTask() {
+           try {
+               const response = await fetch(`/pause/${mainTaskId}`, {
+                   method: 'POST'
+               });
+
+               const result = await response.json();
+
+               if (result.status === 'paused') {
+                   logDebug('Evaluation paused');
+
+                   // Update button states
+                   document.getElementById('pause-button').classList.add('hidden');
+                   document.getElementById('resume-button').classList.remove('hidden');
+
+                   // Update status badge
+                   const mainStatusBadge = document.getElementById('main-status-badge');
+                   mainStatusBadge.textContent = 'Paused';
+                   mainStatusBadge.className = 'px-2 py-1 rounded text-sm bg-yellow-200 text-yellow-800';
+               } else {
+                   logDebug('Failed to pause evaluation', result.error);
+                   alert('Failed to pause: ' + (result.error || 'Unknown error'));
+               }
+           } catch (error) {
+               logDebug('Error while pausing evaluation', error);
+               alert('Error during pause: ' + error.message);
+           }
+       }
+
+       async function resumeTask() {
+           try {
+               const response = await fetch(`/resume/${mainTaskId}`, {
+                   method: 'POST'
+               });
+
+               const result = await response.json();
+
+               if (result.status === 'resumed') {
+                   logDebug('Evaluation resumed');
+
+                   // Update button states
+                   document.getElementById('pause-button').classList.remove('hidden');
+                   document.getElementById('resume-button').classList.add('hidden');
+
+                   // Update status badge
+                   const mainStatusBadge = document.getElementById('main-status-badge');
+                   mainStatusBadge.textContent = 'In Progress';
+                   mainStatusBadge.className = 'px-2 py-1 rounded text-sm bg-blue-200 text-blue-800';
+               } else {
+                   logDebug('Failed to resume evaluation', result.error);
+                   alert('Failed to resume: ' + (result.error || 'Unknown error'));
+               }
+           } catch (error) {
+               logDebug('Error while resuming evaluation', error);
+               alert('Error during resume: ' + error.message);
+           }
+       }
+       function updateProgress(data) {
+           try {
+               logDebug('Progress update received', data);
+
+               // Update overall progress
+               const progressBar = document.getElementById('progress-bar');
+               const progressPercentage = document.getElementById('progress-percentage');
+               const mainStatusBadge = document.getElementById('main-status-badge');
+
+               if (data.progress) {
+                   const progress = data.progress;
+                   const progressValue = progress.total_progress || 0;
+
+                   progressBar.style.width = `${progressValue}%`;
+                   progressPercentage.textContent = Math.round(progressValue);
+
+                   // Clear existing evaluation topics container
+                   const examTopicsContainer = document.getElementById('exam-topics-container');
+                   examTopicsContainer.innerHTML = '';
+
+                   // Process by evaluation topics
+                   const topicGroups = {};
+                   if (progress.exam_catogory && Array.isArray(progress.exam_catogory)) {
+                       // Group questions by topic
+                       progress.exam_catogory.forEach(topic => {
+                           const topicName = topic.topic;
+                           if (!topicGroups[topicName]) {
+                               topicGroups[topicName] = {
+                                   tasks: [],
+                                   status: topic.status || 'PENDING'
+                               };
+                           }
+                           topicGroups[topicName].tasks.push(topic);
+                       });
+
+                       // Create section for each topic
+                       Object.entries(topicGroups).forEach(([topicName, groupData]) => {
+                           const topicSection = document.createElement('div');
+                           topicSection.className = 'mb-8';
+
+                           // Calculate topic overall status
+                           const topicStatus = getTopicStatus(groupData.tasks);
+                           const statusClass = getStatusClass(topicStatus.state);
+
+                           topicSection.innerHTML = `
+                               <div class="flex justify-between items-center mb-4">
+                                   <h3 class="text-lg font-medium">Topic: ${topicName}</h3>
+                                   <span class="px-2 py-1 rounded-full text-sm ${statusClass}">
+                                       ${topicStatus.text}
+                                   </span>
+                               </div>
+                               <div class="bg-gray-50 rounded-lg p-6">
+                                   <div class="space-y-4 topic-tasks"></div>
+                               </div>
+                           `;
+
+                           const tasksContainer = topicSection.querySelector('.topic-tasks');
+                           groupData.tasks.forEach(task => {
+                               Object.entries(task.tasks).forEach(([taskName, taskData]) => {
+                                   const taskElement = createTaskElement({
+                                       name: taskName,
+                                       ...taskData
+                                   });
+                                   tasksContainer.appendChild(taskElement);
+                               });
+                           });
+
+                           examTopicsContainer.appendChild(topicSection);
+                       });
+                   }
+               }
+
+               // Update main status
+               const state = data.state || 'PENDING';
+               mainStatusBadge.textContent = getStatusText(state);
+               mainStatusBadge.className = 'px-2 py-1 rounded text-sm ' + getStatusClass(state);
+
+               if (state === 'SUCCESS' || state === 'FAILED' || state === 'TERMINATED') {
+                   if (state === 'SUCCESS') {
+                       mainStatusBadge.textContent = 'Completed';
+                       mainStatusBadge.className = 'px-2 py-1 rounded text-sm bg-green-200 text-green-800';
+                       document.getElementById('export-button').classList.remove('hidden');
+                   }
+                   else if (state === 'FAILED') {
+                       mainStatusBadge.textContent = 'Failed';
+                       mainStatusBadge.className = 'px-2 py-1 rounded text-sm bg-red-200 text-red-800';
+                   }
+                   else if (state === 'TERMINATED') {
+                       mainStatusBadge.textContent = 'Terminated';
+                       mainStatusBadge.className = 'px-2 py-1 rounded text-sm bg-red-200 text-red-800';
+                   }
+
+                   closeEventSource();
+
+                   // Disable control buttons
+                   const terminateButton = document.getElementById('terminate-button');
+                   terminateButton.disabled = true;
+                   terminateButton.className = 'px-4 py-2 bg-gray-400 text-white rounded cursor-not-allowed';
+
+                   document.getElementById('pause-button').disabled = true;
+                   document.getElementById('pause-button').className = 'px-4 py-2 bg-gray-400 text-white rounded cursor-not-allowed';
+                   document.getElementById('resume-button').disabled = true;
+                   document.getElementById('resume-button').className = 'px-4 py-2 bg-gray-400 text-white rounded cursor-not-allowed';
+               }
+           } catch (error) {
+               logDebug('Error updating progress', error);
+               console.error('Error updating progress:', error);
+           }
+       }
+
+    //    function exportResult() {
+    //        fetch(`/export/${mainTaskId}`, {
+    //            method: 'POST'
+    //        })
+    //        .then(response => {
+    //            if (response.ok) {
+    //                const filename = response.headers.get('content-disposition')
+    //                    ?.split('filename=')[1]
+    //                    ?.replace(/["']/g, '')
+    //                    || `evaluation_export_${mainTaskId}.csv`;
+
+    //                return response.blob().then(blob => {
+    //                    const url = window.URL.createObjectURL(blob);
+    //                    const a = document.createElement('a');
+    //                    a.href = url;
+    //                    a.download = filename;
+
+    //                    document.body.appendChild(a);
+    //                    a.click();
+
+    //                    document.body.removeChild(a);
+    //                    window.URL.revokeObjectURL(url);
+
+    //                    logDebug('Results exported successfully');
+    //                });
+    //            } else {
+    //                logDebug('Export failed');
+    //                throw new Error('Export failed');
+    //            }
+    //        })
+    //        .catch(error => {
+    //            logDebug('Error during export:', error);
+    //        });
+    //    }
+       function logDebug(message, data = null) {
+           const debugLog = document.getElementById('debug-log');
+           const timestamp = new Date().toLocaleTimeString();
+           const logMessage = data ?
+               `[${timestamp}] ${message}: ${JSON.stringify(data)}` :
+               `[${timestamp}] ${message}`;
+           debugLog.innerHTML = logMessage + '<br>' + debugLog.innerHTML;
+       }
+
+       function getStatusClass(status) {
+           return {
+               'PENDING': 'bg-yellow-200 text-yellow-800',
+               'PROGRESS': 'bg-blue-200 text-blue-800',
+               'SUCCESS': 'bg-green-200 text-green-800',
+               'FAILED': 'bg-red-200 text-red-800',
+               'TERMINATED': 'bg-red-200 text-red-800'
+           }[status] || 'bg-gray-200 text-gray-800';
+       }
+
+       function getStatusText(status) {
+           return {
+               'PENDING': 'Pending',
+               'PROGRESS': 'In Progress',
+               'SUCCESS': 'Completed',
+               'FAILED': 'Failed',
+               'TERMINATED': 'Terminated'
+           }[status] || status;
+       }
+
+       function startEventSource() {
+           if (isTaskTerminated) {
+               logDebug('Task terminated, no new connection will be established');
+               return;
+           }
+
+           logDebug('Establishing SSE connection');
+
+           closeEventSource();
+
+           eventSource = new EventSource(`/evaluation_status/${mainTaskId}/stream`);
+
+           eventSource.onopen = function() {
+               logDebug('SSE connection established');
+           };
+
+           eventSource.onmessage = function(event) {
+               try {
+                   const data = JSON.parse(event.data);
+                   updateProgress(data);
+                   // Check if terminated
+                   if (data.state === 'TERMINATED') {
+                       isTaskTerminated = true;
+                       closeEventSource();
+                   }
+               } catch (error) {
+                   logDebug('Error parsing message', error);
+               }
+           };
+
+           eventSource.onerror = function(error) {
+               logDebug('SSE connection error');
+               closeEventSource();
+           };
+       }
+
+       function closeEventSource() {
+           if (eventSource) {
+               logDebug('Closing SSE connection');
+               eventSource.close();
+               eventSource = null;
+           }
+       }
+
+       // Initialize
+       document.addEventListener('DOMContentLoaded', function() {
+           logDebug('Page loaded, starting task monitoring...', { taskId: mainTaskId });
+           startEventSource();
+       });
+
+       // Cleanup on page unload
+       window.addEventListener('beforeunload', closeEventSource);
+   </script>
+</body>
+</html>

@@ -6,9 +6,9 @@ from typing import Any, Callable, Dict, Optional
 from flask import current_app, request, session
 from user_agents import parse
 
-from src.controllers import CRUDController
-from src.controllers.data_handler import DummyHandler
+from src.models.controller import BasicController
 from src.models.db_schema import OperationHistoryData
+from src.utils.data_handler import IdentityHandler
 from src.utils.logger import logger
 
 
@@ -92,11 +92,10 @@ def user_logger():
                 device_info=user_info["device_info"],
                 ip_address=user_info["ip_address"],
                 description=f"Function: {func.__name__}, Args: {str(kwargs)}, Operation: {operation_type}",
-                comment=None,
-                status=1,
             )
-            controller = CRUDController(
-                request_handler=DummyHandler(align_dataclass=OperationHistoryData)
+
+            controller = BasicController(
+                request_handler=IdentityHandler(align_dataclass=OperationHistoryData)
             )
             controller.add_data(request_data=log_entry)
 

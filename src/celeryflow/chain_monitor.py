@@ -92,10 +92,10 @@ async def get_task_info(task: AsyncResult, task_name: str, revoke: bool) -> Dict
 
 async def process_exam_result(exam_result: Dict, revoke: bool, root_id: str) -> Dict:
     """Asynchronously process a single exam result, retrieving progress for each subtask."""
-    from run import celery_app
+    from app_run import celery_app
 
     # Extract topic and chain_result from the exam result
-    exam_topic = exam_result["Exam Topic"]["topic"]
+    exam_catogory = exam_result["Categories"]["evaluation_type"]
     chain_result = exam_result["chain_result"]
 
     # Retrieve all task IDs associated with this exam's chain
@@ -119,7 +119,7 @@ async def process_exam_result(exam_result: Dict, revoke: bool, root_id: str) -> 
     exam_completed = sum(1 for task in tasks_info if task["status"] == "SUCCESS")
     return {
         "status": tasks_info[0]["status"],
-        "topic": exam_topic,
+        "topic": exam_catogory,
         "tasks": tasks_info,
         "progress": (exam_completed / len(chain_tasks) * 100) if chain_tasks else 0,
         "completed_tasks": exam_completed,
@@ -132,7 +132,7 @@ async def get_chain_progress(task_id: str, revoke: bool) -> Dict:
 
     try:
         # Retrieve the main task result
-        from run import celery_app
+        from app_run import celery_app
 
         main_result = celery_app.AsyncResult(task_id)
         results = main_result.info
@@ -149,7 +149,7 @@ async def get_chain_progress(task_id: str, revoke: bool) -> Dict:
             "state": "SUCCESS" if total_completed == total_tasks else "PROGRESS",
             "progress": {
                 "total_progress": total_progress,
-                "exam_topics": exam_results,
+                "exam_catogory": exam_results,
                 "completed_tasks": total_completed,
                 "total_tasks": total_tasks,
                 "total_exams": len(results),
@@ -163,7 +163,7 @@ async def get_chain_progress(task_id: str, revoke: bool) -> Dict:
             "error": str(e),
             "progress": {
                 "total_progress": 0,
-                "exam_topics": [],
+                "exam_catogory": [],
                 "completed_tasks": 0,
                 "total_tasks": 0,
             },

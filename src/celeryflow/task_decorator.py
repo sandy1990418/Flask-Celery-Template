@@ -64,7 +64,7 @@ class DataView:
 
         return {
             "data": [
-                self.original_data[self.current_index]
+                self.original_data["data"][self.current_index]
             ],  # Specific data point for the current index
             **{
                 k: self[k]
@@ -120,7 +120,7 @@ def process_items(
 ) -> Generator[Dict, None, None]:
     """Processes each item using a generator to save memory, applying the task function to each item individually."""
 
-    total = len(data)  # Total items to process
+    total = len(data["data"])  # Total items to process
 
     result = defaultdict(list)
     for idx in range(total):
@@ -138,7 +138,7 @@ def process_items(
         # Update progress monitor
         monitor.update()
 
-        result["result_list"].append(result_temp)
+        result["evaluation_response_list"].extend(result_temp)
         yield result  # Yield the result for each processed item
 
 
@@ -154,20 +154,19 @@ def with_progress(description: str):
 
             try:
                 # Retrieve data from args or kwargs
-                data = args[0] if args else kwargs.get("question_data")
+                data = args[0] if args else kwargs.get("data")
 
                 # Initialize progress monitoring based on data length
                 total = (
-                    len(data)  # ["question_data"]["data"]
-                    if isinstance(data, list)  # and "question_data" in data
+                    len(data["data"])  # ["question_data"]["data"]
+                    if isinstance(data, dict) and "data" in data
                     else 1
                 )
-
+                logger.info(f"The Total Question: {total}")
                 monitor = ProgressMonitor(self, total, description)
                 pause_controller = PauseController(self.request.id)
 
                 if total != 1:
-                    test_paper = args[1]
                     # Process each item with generator for memory efficiency
 
                     all_results = process_items(
@@ -201,10 +200,8 @@ def with_progress(description: str):
                             if isinstance(processed_result.get(key), list):
                                 result[key].extend(processed_result[key])
 
-                    test_paper["evaluation_result"].update(
-                        {"duration": monitor.execution_time}
-                    )
-                    return result, test_paper
+                    result.update({"duration": monitor.execution_time})
+                    return result
                 else:
                     # If no iterable data, run the task function normally
                     with pause_controller.pause_check():

@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Project Management</title>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/tailwindcss/2.2.19/tailwind.min.css" rel="stylesheet">
+    <script>
+        function toggleForm(formId, buttonGroupId) {
+            const form = document.getElementById(formId);
+            const buttonGroup = document.getElementById(buttonGroupId);
+
+            if (form.style.display === 'none') {
+                form.style.display = 'block';
+                buttonGroup.style.display = 'none';
+            } else {
+                form.style.display = 'none';
+                buttonGroup.style.display = 'flex';
+            }
+        }
+
+        function viewEvaluationStatus(modelId, modelName, modelVersion) {
+            const taskInfo = JSON.parse(localStorage.getItem(`evaluation_task_${modelId}`) || '{}');
+
+            if (!taskInfo.task_id) {
+                alert('No ongoing evaluation tasks for this model');
+                return;
+            }
+
+            window.location.href = "{{ url_for('evaluation.evaluation_status_page', task_id='TASK_ID') }}"
+                .replace('TASK_ID', taskInfo.task_id)
+                + `?model_id=${modelId}`
+                + `&model_name=${encodeURIComponent(modelName)}`
+                + `&model_version=${encodeURIComponent(modelVersion)}`;
+        }
+    </script>
+</head>
+<body class="bg-gray-50 p-8">
+    <div class="max-w-4xl mx-auto">
+        <h1 class="text-2xl font-bold mb-6">List Management</h1>
+
+        <!-- Add Project -->
+        <button onclick="toggleForm('addForm', '')" class="mb-4 px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700">Add Project</button>
+        <form id="addForm" action="{{ url_for('project.add_project') }}" method="POST" style="display:none;" class="space-y-4 bg-white p-6 rounded-lg shadow-md mb-6">
+            <input type="text" name="project_name" placeholder="Enter Project Name" required class="w-full px-3 py-2 border rounded">
+            <input type="text" name="project_owner" placeholder="Enter Project Owner's Full Name" required class="w-full px-3 py-2 border rounded">
+            <button type="submit" class="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700">Add</button>
+        </form>
+
+        <ul class="space-y-6">
+            {% for project in projects %}
+            {% set outer_loop = loop %}
+            <li class="bg-white rounded-lg shadow-md p-6">
+                <div class="flex items-center justify-between mb-4">
+                    <span class="text-lg font-medium">{{ project.project_name }}</span>
+
+                    <!-- Button Group -->
+                    <div id="buttonGroup{{ outer_loop.index0 }}" class="space-x-2 flex">
+                        <button onclick="toggleForm('editForm{{ outer_loop.index0 }}', 'buttonGroup{{ outer_loop.index0 }}')" class="px-3 py-1 bg-gray-500 text-white rounded hover:bg-gray-600">Edit</button>
+                        <form action="{{ url_for('project.delete_project', project_id=project.project_id, action_type='delete')}}" method="POST" style="display:inline;">
+                            <button type="submit" name="button_action" value="Delete" class="px-3 py-1 bg-red-600 text-white rounded hover:bg-red-700">Delete</button>
+                        </form>
+                        <div class="relative inline-block">
+                            <button onclick="toggleForm('addFormModel{{ outer_loop.index0 }}', '')" class="px-3 py-1 bg-green-600 text-white rounded hover:bg-green-700">Add Model</button>
+                            <div id="addFormModel{{ outer_loop.index0 }}" style="display:none;" class="absolute right-0 mt-2 w-64 bg-white rounded-lg shadow-lg p-4 z-50">
+                                <form action="{{ url_for('model.add_model', project_id=project.project_id) }}" method="POST" class="space-y-3">
+                                    <input type="text" name="model_name" placeholder="Enter Model Name" required class="w-full px-3 py-2 border rounded">
+                                    <input type="text" name="model_version" placeholder="Enter Model Version" class="w-full px-3 py-2 border rounded">
+                                    <input type="text" name="model_endpoint" placeholder="Enter Model Endpoint" required class="w-full px-3 py-2 border rounded">
+                                    <div class="flex justify-end gap-2">
+                                        <button type="submit" name="button_action" value="Add Model" class="px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700">Add</button>
+                                    </div>
+                                </form>
+                            </div>
+                        </div>
+                        <form action="{{ url_for('project.history_record_project', project_name=project.project_name, from_project_id=project.project_id) }}" method="POST" style="display:inline;">
+                            <button type="submit" name="button_action" value="history_record" class="px-3 py-1 bg-blue-500 text-white rounded-lg hover:bg-blue-600">History</button>
+                        </form>
+                    </div>
+
+                    <!-- Edit Form -->
+                    <form id="editForm{{ outer_loop.index0 }}" action="{{ url_for('project.update_project', project_id=project.project_id, action_type='update')}}" method="POST" style="display:none;" class="space-y-3">
+                        <div class="flex flex-wrap gap-3">
+                            <input type="text" name="project_name" value="{{ project.project_name }}" placeholder="Enter Project Name" required class="flex-1 px-3 py-2 border rounded">
+                            <input type="text" name="project_owner" value="{{ project.project_owner }}" placeholder="Enter Project Owner's Full Name" required class="flex-1 px-3 py-2 border rounded">
+                        </div>
+                        <div class="flex justify-end gap-2">
+                            <button type="button" onclick="toggleForm('editForm{{ outer_loop.index0 }}', 'buttonGroup{{ outer_loop.index0 }}')" class="px-3 py-1 bg-gray-500 text-white rounded hover:bg-gray-600">Cancel</button>
+                            <button type="submit" name="button_action" value="Save" class="px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700">Save</button>
+                        </div>
+                    </form>
+                </div>
+
+                <ul class="space-y-4 ml-6">
+                    {% for model in project.include_child %}
+                    <li class="bg-gray-50 rounded-lg p-4">
+                        <div class="flex items-center justify-between">
+                            <span>{{ model.model_name }}</span>
+                            <!-- Model Button Group -->
+                            <div id="modelButtonGroup{{ loop.index0 }}{{ outer_loop.index0 }}" class="space-x-2 flex">
+                                <button onclick="toggleForm('editForm{{ loop.index0 }}{{ outer_loop.index0 }}', 'modelButtonGroup{{ loop.index0 }}{{ outer_loop.index0 }}')" class="px-3 py-1 bg-gray-500 text-white rounded hover:bg-gray-600">Edit</button>
+                                <form action="{{ url_for('model.delete_model', model_id=model.model_id, action_type='delete')}}" method="POST" style="display:inline;">
+                                    <button type="submit" name="button_action" value="Delete" class="px-3 py-1 bg-red-600 text-white rounded hover:bg-red-700">Delete</button>
+                                </form>
+                                <form action="{{ url_for('evaluation.evaluation_home', model_id=model.model_id, model_name=model.model_name, model_version=model.model_version, model_endpoint=model.model_endpoint)}}" method="POST" style="display:inline;">
+                                    <button type="submit" name="button_action" value="Add Evaluation" class="px-3 py-1 bg-green-600 text-white rounded hover:bg-green-700">Add Evaluation</button>
+                                </form>
+                                <button onclick="viewEvaluationStatus('{{ model.model_id }}', '{{ model.model_name }}', '{{ model.model_version }}')"
+                                        class="px-3 py-1 bg-blue-500 text-white rounded hover:bg-blue-600">
+                                    Current Status
+                                </button>
+                            </div>
+
+                            <!-- Model Edit Form -->
+                            <form id='editForm{{ loop.index0 }}{{ outer_loop.index0 }}' action="{{ url_for('model.update_model', project_id=model.project_id, model_id=model.model_id, action_type='update')}}" method="POST" style="display:none;" class="space-y-3">
+                                <div class="flex gap-3">
+                                    <input type="text" name="model_name" value="{{ model.model_name }}" placeholder="Enter Model Name" required class="flex-1 px-3 py-2 border rounded">
+                                    <input type="text" name="model_version" value="{{ model.model_version }}" placeholder="Enter Model Version" class="flex-1 px-3 py-2 border rounded">
+                                    <input type="text" name="model_endpoint" value="{{ model.model_endpoint }}" placeholder="Enter Model Endpoint" required class="flex-1 px-3 py-2 border rounded">
+                                </div>
+                                <div class="flex justify-end gap-2">
+                                    <button type="button" onclick="toggleForm('editForm{{ loop.index0 }}{{ outer_loop.index0 }}', 'modelButtonGroup{{ loop.index0 }}{{ outer_loop.index0 }}')" class="px-3 py-1 bg-gray-500 text-white rounded hover:bg-gray-600">Cancel</button>
+                                    <button type="submit" name="button_action" value="Save" class="px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700">Save</button>
+                                </div>
+                            </form>
+                        </div>
+                    </li>
+                    {% endfor %}
+                </ul>
+            </li>
+            {% endfor %}
+        </ul>
+    </div>
+</body>
+</html>

@@ -36,7 +36,7 @@ A project template integrating Flask and Celery for handling asynchronous tasks 
 
 1. Start the Flask application:
    ```bash
-   python run.py
+   python app_run.py
    ```
 
 2. Start the Celery worker:

@@ -68,6 +68,7 @@ class BaseDriver(ABC):
         model_name: TEXT
         model_version: TEXT
         model_endpoint: TEXT
+        exam_catogory: TEXT
         created_at: TIMESTAMP
         status: INTEGER
         """
@@ -83,6 +84,7 @@ class BaseDriver(ABC):
                 project_id INTEGER NOT NULL,
                 model_name TEXT NOT NULL,
                 model_endpoint TEXT NOT NULL,
+                exam_catogory TEXT,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 status INTEGER NOT NULL,
                 FOREIGN KEY (project_id) REFERENCES Project(project_id)
@@ -99,7 +101,9 @@ class BaseDriver(ABC):
         -----
         result_id: INTEGER
         model_id: INTEGER
+        user_id: TEXT
         question_version_id: INTEGER
+        evaluation_type: TEXT
         result_score: INTEGER
         duration: INTEGER
         created_at: TIMESTAMP
@@ -115,13 +119,15 @@ class BaseDriver(ABC):
             CREATE TABLE IF NOT EXISTS Result(
                 result_id INTEGER PRIMARY KEY AUTOINCREMENT,
                 model_id INTEGER NOT NULL,
+                user_id VARCHAR(8) NOT NULL,
                 question_version_id INTEGER NOT NULL,
+                evaluation_type TEXT,
                 result_score INTEGER,
                 duration INTEGER,  -- 假設是以秒單位
-                comment TEXT,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 status INTEGER NOT NULL,
                 FOREIGN KEY (model_id) REFERENCES Model(model_id),
+                FOREIGN KEY (user_id) REFERENCES Person(user_id),
                 FOREIGN KEY (question_version_id) REFERENCES QuestionVersion(question_version_id)
             );
             """
@@ -174,6 +180,7 @@ class BaseDriver(ABC):
         device_info: TEXT
         ip_address: TEXT
         created_at: TIMESTAMP
+        description: TEXT
         status: INTEGER
         """
 
@@ -190,6 +197,7 @@ class BaseDriver(ABC):
                 device_info TEXT,
                 ip_address TEXT,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                description TEXT,
                 status INTEGER NOT NULL,
                 FOREIGN KEY (user_id) REFERENCES Person(user_id)
             );
@@ -197,7 +205,7 @@ class BaseDriver(ABC):
         )
 
     @_enable_create
-    def create_resultrecord_tbl(self):
+    def create_resultrecord_table(self):
         """
         Create a ResultRecord table in the database.
 
@@ -231,67 +239,7 @@ class BaseDriver(ABC):
         )
 
     @_enable_create
-    def create_questionversion_tbl(self):
-        """
-        Create a QuestionVersion table in the database.
-
-        DB Attributes:
-        -----
-        question_version_id: INTEGER
-        question_version: INTEGER
-        question_type: TEXT
-        created_at: TIMESTAMP
-        status: INTEGER
-        """
-
-        logging.info("Create QuestionVersion Table...")
-
-        creator = self.get_table_handler()
-
-        creator.execute(
-            """
-            CREATE TABLE IF NOT EXISTS QuestionVersion (
-                question_version_id INTEGER PRIMARY KEY AUTOINCREMENT,
-                question_version INTEGER NOT NULL,
-                question_type TEXT NOT NULL,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                status INTEGER NOT NULL
-            );
-            """
-        )
-
-    @_enable_create
-    def create_questioncategory_tbl(self):
-        """
-        Create a QuestionCategory table in the database.
-
-        DB Attributes:
-        -----
-        question_category_id: INTEGER
-        question_type: TEXT
-        type_prompt_content: TEXT
-        created_at: TIMESTAMP
-        status: INTEGER
-        """
-
-        logging.info("Create QuestionCategory Table...")
-
-        creator = self.get_table_handler()
-
-        creator.execute(
-            """
-            CREATE TABLE IF NOT EXISTS QuestionCategory (
-                question_category_id INTEGER PRIMARY KEY AUTOINCREMENT,
-                question_type TEXT NOT NULL,
-                type_prompt_content TEXT,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                status INTEGER NOT NULL
-            );
-            """
-        )
-
-    @_enable_create
-    def create_question_tbl(self):
+    def create_question_table(self):
         """
         Create a Question table in the database.
 
@@ -299,9 +247,10 @@ class BaseDriver(ABC):
         -----
         question_id: INTEGER
         question_version_id: INTEGER
-        question_category_id: INTEGER
+        question_category: TEXT
         question_content: TEXT
         groundtruth_content: TEXT
+        groundtruth_set: TEXT
         groundtruth_type: TEXT
         created_at: TIMESTAMP
         status: INTEGER
@@ -316,14 +265,13 @@ class BaseDriver(ABC):
             CREATE TABLE IF NOT EXISTS Question (
                 question_id INTEGER PRIMARY KEY AUTOINCREMENT,
                 question_version_id INTEGER NOT NULL,
-                question_category_id INTEGER NOT NULL,
+                question_category TEXT NOT NULL,
                 question_content TEXT NOT NULL,
                 groundtruth_content TEXT,
+                groundtruth_set TEXT NOT NULL,
                 groundtruth_type TEXT NOT NULL,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                status INTEGER NOT NULL,
-                FOREIGN KEY (question_version_id) REFERENCES QuestionVersion(question_version_id),
-                FOREIGN KEY (question_category_id) REFERENCES QuestionCategory(question_category_id)
+                status INTEGER NOT NULL
             );
             """
         )

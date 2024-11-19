@@ -10,7 +10,7 @@ RUN apt-get update && apt-get install -y \
 
 COPY ../requirements.txt .
 COPY ../.env .
-COPY ../run.py .
+COPY ../app_run.py .
 COPY ../config.yaml .
 COPY ../src/. ./src/
 

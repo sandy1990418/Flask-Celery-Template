@@ -53,6 +53,7 @@ class APIClient(ABC):
             headers=self.headers,
             json=formatted_input,
         )
+
         if response.status_code == 200:
             return self.format_output(response)
         else:

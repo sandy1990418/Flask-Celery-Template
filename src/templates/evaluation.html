@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+   <meta charset="UTF-8">
+   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+   <title>Evaluation System</title>
+   <link href="https://cdnjs.cloudflare.com/ajax/libs/tailwindcss/2.2.19/tailwind.min.css" rel="stylesheet">
+</head>
+<body class="bg-gray-50 min-h-screen p-8">
+   <div class="max-w-4xl mx-auto">
+       <div class="bg-white rounded-lg shadow-md p-6">
+           <h1 class="text-xl font-medium mb-6">Evaluation System Model ID: {{model_id}}. Model Name: {{model_name}}</h1>
+           <!-- Selection Area -->
+           <div class="flex gap-4 mb-6">
+               <select id="topic" class="w-1/3 py-2 px-3 border rounded">
+                   <option value="">Select Topic</option>
+                   {% for topic in exam_info.keys() %}
+                   <option value="{{ topic }}">{{ topic }}</option>
+                   {% endfor %}
+               </select>
+               <select id="version" class="w-1/3 py-2 px-3 border rounded">
+                   <option value="">Select Version</option>
+               </select>
+               <button id="addSelection" name="button_action" value="Add Topics" class="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700">Add</button>
+           </div>
+
+           <!-- Selected Items List -->
+           <div class="mb-6">
+               <h2 class="text-lg font-medium mb-3">Selected Items:</h2>
+               <div id="selectedItems" class="space-y-2">
+                   <!-- Dynamically added items will appear here -->
+               </div>
+           </div>
+
+           <!-- Submit Buttons -->
+           <div class="flex gap-4">
+               <form id="submitForm" style="display:inline;">
+                   <input type="hidden" name="selected_items" id="selectedItemsInput">
+                   <button type="button" onclick="submitEvaluation()" class="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700">Submit</button>
+               </form>
+               <form action="{{ url_for('evaluation.cancelled_evaluate', model_id=model_id, model_name=model_name, model_version=model_version)}}" method="GET" style="display:inline;">
+                   <button type="submit" class="px-4 py-2 bg-gray-500 text-white rounded hover:bg-gray-600">Cancel</button>
+               </form>
+           </div>
+       </div>
+   </div>
+
+   <script>
+       const selectedItems = new Set();
+       const versionMap = JSON.parse('{{exam_info | tojson | safe}}');
+       console.log('Version Map loaded:', versionMap);
+
+       document.getElementById('topic').addEventListener('change', function() {
+           const topic = this.value;
+           const versionSelect = document.getElementById('version');
+           versionSelect.innerHTML = '<option value="">Select Version</option>';
+
+           if (topic && versionMap[topic]) {
+               const versions = versionMap[topic];
+               const uniqueVersions = [...new Set(versions)];
+
+               uniqueVersions.sort((a, b) => a - b);
+
+               uniqueVersions.forEach(version => {
+                   const option = document.createElement('option');
+                   option.value = version;
+                   option.textContent = `Version ${version}`;
+                   versionSelect.appendChild(option);
+               });
+           }
+       });
+
+       document.getElementById('addSelection').addEventListener('click', function() {
+           const topic = document.getElementById('topic').value;
+           const version = document.getElementById('version').value;
+
+           if (!topic || !version) {
+               alert('Please select both Topic and Version');
+               return;
+           }
+
+           const itemKey = `${topic}-${version}`;
+           if (selectedItems.has(itemKey)) {
+               alert('This combination has already been selected');
+               return;
+           }
+
+           selectedItems.add(itemKey);
+           console.log(selectedItems)
+           updateSelectedItemsDisplay();
+       });
+
+       function updateSelectedItemsDisplay() {
+           const container = document.getElementById('selectedItems');
+           container.innerHTML = '';
+
+           selectedItems.forEach(item => {
+               const [topic, version] = item.split('-');
+               const itemDiv = document.createElement('div');
+               itemDiv.className = 'flex items-center justify-between bg-gray-50 p-3 rounded';
+               itemDiv.innerHTML = `
+                   <span>${topic} - Version ${version}</span>
+                   <button class="px-2 py-1 text-red-600 hover:text-red-800" onclick="removeItem('${item}')">
+                       Delete
+                   </button>
+               `;
+               container.appendChild(itemDiv);
+           });
+
+           document.getElementById('selectedItemsInput').value = JSON.stringify([...selectedItems]);
+       }
+
+       function removeItem(item) {
+           selectedItems.delete(item);
+           updateSelectedItemsDisplay();
+       }
+
+       function submitEvaluation() {
+           if (selectedItems.size === 0) {
+               alert('Please select at least one item');
+               return;
+           }
+
+           var listOfDicts = Array.from(selectedItems).map(item => {
+               const [topic, version] = item.split('-');
+               {% if evaluation_model and evaluation_model[1] %}
+               return {
+                   topic: topic,
+                   version: version,
+                   evaluation_model_name: "{{evaluation_model[1].evaluation_model_name if evaluation_model[1].evaluation_model_name}}",
+                   evaluation_model_type: "{{evaluation_model[1].evaluation_model_type if evaluation_model[1].evaluation_model_type}}",
+                   evaluation_model_endpoint: "{{evaluation_model[1].evaluation_model_endpoint if evaluation_model[1].evaluation_model_endpoint}}",
+                   evaluation_model_id: {{evaluation_model[1].evaluation_model_id if evaluation_model[1].evaluation_model_id else 'null'}}
+               };
+               {% else %}
+               return {
+                   topic: topic,
+                   version: version,
+                   evaluation_model_name: null,
+                   evaluation_model_type: null,
+                   evaluation_model_endpoint: null,
+                   evaluation_model_id: null
+               };
+               {% endif %}
+           });
+
+           var request_data = {
+               "exam_info": listOfDicts,
+               "model_id": {{ model_id }},
+               "model_name": {{model_name | tojson | safe}},
+               "model_version": {{model_version | tojson | safe}},
+               "model_endpoint": "http://test_model:8888"
+           };
+           fetch("{{ url_for('evaluation.do_evaluate')}}", {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(request_data)
+            })
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error('Network response was not ok');
+                }
+                return response.json();
+            })
+            .then(data => {
+                if (data.status === 'success') {
+                    const taskInfo = {
+                        task_id: data.task_id,
+                        start_time: new Date().toISOString(),
+                        exam_info: listOfDicts
+                    };
+                    localStorage.setItem(`evaluation_task_${request_data.model_id}`, JSON.stringify(taskInfo));
+
+                    window.location.href = "{{ url_for('main.home') }}";
+                } else {
+                    alert('Evaluation failed, please try again');
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert('An error occurred, please try again');
+            });
+       }
+   </script>
+</body>
+</html>

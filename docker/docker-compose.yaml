@@ -1,0 +1,107 @@
+version: '3.8'
+
+services:
+
+  db-init:
+    build:
+      context: ..
+      dockerfile: docker/db_init.Dockerfile
+    volumes:
+      - template-db-data:/app/db
+    command: /bin/sh -c "python /app/db/init_db.py && python /app/db/add_model_and_data.py"
+    networks:
+      - template-network
+
+  flask_application:
+    build:
+      context: ..
+      dockerfile: docker/flask.Dockerfile
+    ports:
+      - "5000:5000"
+    environment:
+      - FLASK_APP=app_run.py
+      - FLASK_ENV=production
+    env_file:
+      - ../.env
+    volumes:
+      - template-db-data:/app/db
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      db-init:
+        condition: service_started
+    command: python app_run.py
+    networks:
+      - template-network
+
+  celery_worker:
+    build:
+      context: ..
+      dockerfile: docker/celery.Dockerfile
+    env_file:
+      - ../.env
+    volumes:
+      - template-db-data:/app/db
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      flask_application:
+        condition: service_started
+      db-init:
+        condition: service_started
+    command: >
+      /bin/sh -c '
+        until curl -s http://flask_application:5000 > /dev/null 2>&1;
+        do
+          echo "Waiting for Flask application to be ready...";
+          sleep 3;
+        done;
+        echo "Flask application is ready!";
+        cd /app && celery -A app_run.celery_app worker --purge --loglevel=info
+      '
+    networks:
+      - template-network
+
+  rabbitmq:
+    image: rabbitmq:management
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    healthcheck:
+      test: ["CMD", "rabbitmqctl", "status"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+    volumes:
+      - rabbitmq-data:/var/lib/rabbitmq
+    networks:
+      - template-network
+
+  test_model:
+    build:
+      context: ..
+      dockerfile: docker/flask.Dockerfile
+    command: python test_model/test_model.py
+    ports:
+        - "8888:8888"
+    volumes:
+      - ../test_model:/app/test_model
+    depends_on:
+      - rabbitmq
+    networks:
+      - template-network
+
+networks:
+  template-network:
+    driver: bridge
+
+volumes:
+  template-db-data:
+    name: template-db-data
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: /home/ubuntu/main/Flask-Celery-Template/temp_db
+  rabbitmq-data:
+    name: rabbitmq-data

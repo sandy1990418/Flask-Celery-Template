@@ -15,3 +15,4 @@ hypercorn
 flask-sse
 SQLAlchemy==2.0.36
 Flask-SQLAlchemy==3.1.1
+datasets
