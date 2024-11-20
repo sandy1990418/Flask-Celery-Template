@@ -102,6 +102,6 @@ volumes:
     driver_opts:
       type: none
       o: bind
-      device: /home/ubuntu/main/Flask-Celery-Template/temp_db
+      device: ../temp_db
   rabbitmq-data:
     name: rabbitmq-data
