@@ -7,7 +7,7 @@ load_dotenv()
 app = Flask(__name__)
 
 DUMMY_MODEL = "gpt-4o-mini"
-DUMMY_PROMPT = "你是一個來自臺灣的有用的繁體中文模型。"
+DUMMY_PROMPT = "You are a helpful Language Model"
 
 
 @app.route("/", methods=["POST"])
